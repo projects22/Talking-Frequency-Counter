@@ -1,0 +1,158 @@
+﻿Build1=Default,b4a.GraphicsFirstSteps
+File1=main.bal
+FileGroup1=Default Group
+Group=Default Group
+Library1=core
+Library2=felusbserial
+Library3=usb
+Library4=tts
+ManifestCode='This code will be applied to the manifest file during compilation.~\n~'You do not need to modify it in most cases.~\n~'See this link for for more information: http://www.b4x.com/forum/showthread.php?p=78136~\n~AddManifestText(~\n~<uses-sdk android:minSdkVersion="5" android:targetSdkVersion="26"/>~\n~<supports-screens android:largeScreens="true" ~\n~    android:normalScreens="true" ~\n~    android:smallScreens="true" ~\n~    android:anyDensity="true"/>)~\n~SetApplicationAttribute(android:icon, "@drawable/icon")~\n~SetApplicationAttribute(android:label, "$LABEL$")~\n~'End of default text.~\n~
+NumberOfFiles=1
+NumberOfLibraries=4
+NumberOfModules=0
+Version=10.2
+@EndOfDesignText@
+#Region  Project Attributes 
+	#ApplicationLabel: talking_frequency
+	#VersionCode: 1
+	#VersionName: 2
+	'SupportedOrientations possible values: unspecified, landscape or portrait.
+	#SupportedOrientations: portrait
+	#CanInstallToExternalStorage: False
+#End Region
+
+#Region  Activity Attributes 
+	#FullScreen: False
+	#IncludeTitle: True
+#End Region
+
+Sub Process_Globals
+	Private usbserial As felUsbSerial
+	Private manager As UsbManager
+	Private TTS1 As TTS
+	Dim timer1 As Timer
+
+End Sub
+
+Sub Globals
+	Private btnConnect As Button
+	Private Label1 As Label
+	Private analog1 As EditText	
+	Private changeBar As SeekBar
+	Private freq="1000" As String
+	Private lblTime As Label
+	Private sec As String
+	Private speakEn=False, dis=True As Boolean
+	Private btnTalk1 As ToggleButton
+End Sub
+
+Sub Activity_Create(FirstTime As Boolean)
+	If FirstTime Then
+		manager.Initialize
+	End If
+	Activity.LoadLayout("main")	
+	TTS1.Initialize("TTS1")
+	TTS1.SpeechRate = 0.75
+	timer1.Initialize("timer1", 10000)
+	timer1.Enabled=False
+	analog1.Text="1000"
+End Sub
+
+Private Sub serial_DataAvailable (Buffer() As Byte)		' bytes received
+	Dim fb1, fb2, fb3, kh, mh, hz As Int
+	Dim df As Float
+	
+	If Buffer.Length > 3 Then
+		If Buffer(0)=50 Then
+			fb1=Bit.And(0xFF,Buffer(1))		'convert to unsigned bytes
+			fb2=Bit.And(0xFF,Buffer(2))
+			fb3=Bit.And(0xFF,Buffer(3))
+			freq = fb1*65536 + fb2*256 + fb3
+			df=freq
+			analog1.Text=NumberFormat(df,0,0)
+			
+			If speakEn And dis Then 
+				'TTS1.Speak(freq & "hertz", True)
+				mh=freq/1000000
+				kh=(freq Mod 1000000) / 1000
+				hz=freq Mod 1000
+				If mh > 0  Then TTS1.Speak(mh & "meg", True)
+				If kh > 0 Then TTS1.Speak(kh & "k", False)
+				If hz > 0 Then TTS1.Speak(hz , False)
+				If freq < 1000 Then TTS1.Speak("hertz" , False)
+				speakEn=False
+			End If
+
+		End If
+	End If
+End Sub
+
+Sub btnTalk1_CheckedChange(Checked As Boolean)
+	If Checked Then 
+		changeBar.Enabled=True
+		lblTime.Enabled=True
+		talkTime
+		dis=True
+	Else
+		dis=False
+		changeBar.Enabled=False
+		lblTime.Enabled=False
+	End If
+End Sub
+
+Sub Timer1_Tick
+	speakEn=True
+End Sub
+
+Sub changeBar_ValueChanged (Value As Int, UserChanged As Boolean)
+	If UserChanged Then
+		talkTime
+	End If
+End Sub
+
+Sub talkTime
+	sec = changeBar.Value + 5
+	timer1.Interval = 1000 * sec
+	lblTime.Text = "Talk every " & sec & " seconds"
+End Sub
+
+Sub btnConnect_Click
+	If manager.GetDevices.Length = 0 Then
+		Label1.Text = "USB device not found"
+	Else
+		Dim device As UsbDevice = manager.GetDevices(0) 'the device
+		If manager.HasPermission(device) = False Then
+			manager.RequestPermission(device)
+		Else
+			usbserial.Initialize("serial", device, -1)
+			usbserial.BaudRate = 9600
+			usbserial.DataBits = usbserial.DATA_BITS_8
+			usbserial.StartReading
+			Label1.Text = "USB Connected"
+			timer1.Enabled=True
+			talkTime
+		End If
+	End If
+End Sub
+
+Sub TTS1_Ready (Success As Boolean)
+	If Success Then
+		speakEn=True
+	Else
+		ToastMessageShow("Error initializing TTS engine.", "")
+	End If
+End Sub
+
+Sub Activity_Resume
+	If TTS1.IsInitialized = False Then
+		TTS1.Initialize("TTS1")
+		TTS1.SpeechRate = 0.75
+	End If
+End Sub
+
+Sub Activity_Pause (UserClosed As Boolean)
+	TTS1.Release
+End Sub
+
+
+
